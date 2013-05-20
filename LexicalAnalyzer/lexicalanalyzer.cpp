@@ -87,16 +87,17 @@ void LexicalAnalyzer::initUi()
 	ui.tableView_token->setEditTriggers(QAbstractItemView::NoEditTriggers);
 	ui.tableView_token->setColumnWidth(0, 60);
 	ui.tableView_token->setColumnWidth(2, 68);
-	ui.tableView_token->setColumnWidth(3, 122);
+	ui.tableView_token->setColumnWidth(3, 162);
 
 	QStandardItemModel *itemModel_error = new QStandardItemModel();
 	itemModel_error->setHorizontalHeaderItem(0, new QStandardItem(QStringLiteral("错误行号")));
-	itemModel_error->setHorizontalHeaderItem(1, new QStandardItem(QStringLiteral("错误信息")));
+	itemModel_error->setHorizontalHeaderItem(1, new QStandardItem(QStringLiteral("单词")));
+	itemModel_error->setHorizontalHeaderItem(2, new QStandardItem(QStringLiteral("错误信息")));
 	ui.tableView_error->setModel(itemModel_error);
 	ui.tableView_error->setSelectionBehavior(QAbstractItemView::SelectRows);
 	ui.tableView_error->setEditTriggers(QAbstractItemView::NoEditTriggers);
 	ui.tableView_error->setColumnWidth(0, 70);
-	ui.tableView_error->setColumnWidth(1, 280);
+	ui.tableView_error->setColumnWidth(1, 320);
 
 	QFont font_toolbar;
 	font_toolbar.setFamily(QStringLiteral("微软雅黑"));
@@ -111,28 +112,16 @@ void LexicalAnalyzer::initUi()
 	ui.toolBar->addAction(ui.action_tokenlist);
 	ui.toolBar->addAction(ui.action_about);
 	ui.toolBar->addAction(ui.action_homepage);
-	
+
 	QLabel *label_statusPic = new QLabel(this);
-	label_statusPic->setPixmap(QPixmap(":/img/logo_s"));
+	label_statusPic->setPixmap(QPixmap(":/img/logo_ss"));
 	ui.statusBar->addWidget(label_statusPic);
-	QLabel *label_statusText = new QLabel(this);
+	label_statusText = new QLabel(this);
 	label_statusText->setText(QStringLiteral("就绪"));
 	ui.statusBar->addWidget(label_statusText);
 
-	/*for (int i = 0; i < 100; i++)
-	{
-		for (int j = 0; j < 4; j++)
-		{
-			itemModel_token->setItem(i, j, new QStandardItem(QStringLiteral("#")));
-		}
-	}*/
-	for (int i = 0; i < 100; i++)
-	{
-		for (int j = 0; j < 2; j++)
-		{
-			itemModel_error->setItem(i, j, new QStandardItem(QStringLiteral("#")));
-		}
-	}
+	timer_status = new QTimer(this);
+	connect(timer_status, SIGNAL(timeout()), this, SLOT(on_timer_status_timeout()));
 }
 
 bool LexicalAnalyzer::openfile(QString path)
@@ -163,6 +152,7 @@ bool LexicalAnalyzer::savefile(QString path_file)
 		out << str_src;
 		setWindowTitle(QStringLiteral("Lexizer 词法分析器 - ") + path_file);
 		file->close();
+		showState(ui.action_save->text());
 	}
 	return true;
 }
@@ -203,15 +193,18 @@ void LexicalAnalyzer::on_action_new_triggered()
 		{
 			on_action_save_triggered();
 			newfile();
+			showState(ui.action_new->text());
 		} 
 		else if (messageBox->clickedButton() == button_discard)
 		{
 			newfile();
+			showState(ui.action_new->text());
 		}
 	} 
 	else
 	{
 		newfile();
+		showState(ui.action_new->text());
 	}
 }
 
@@ -256,11 +249,15 @@ void LexicalAnalyzer::showOpenFileDialog()
 			messageBox->addButton(QStringLiteral("确定"), QMessageBox::ActionRole);
 			messageBox->exec();
 		}
-		ui.action_save->setEnabled(true);
-		ui.action_analyse->setEnabled(true);
-		ui.textEdit_code->setEnabled(true);
-		ui.action_clear->setEnabled(true);
-		qDebug() << "OPEN";
+		else
+		{
+			ui.action_save->setEnabled(true);
+			ui.action_analyse->setEnabled(true);
+			ui.textEdit_code->setEnabled(true);
+			ui.action_clear->setEnabled(true);
+			showState(ui.action_open->text());
+			qDebug() << "OPEN";
+		}
 	} 
 	else
 	{
@@ -297,6 +294,12 @@ void LexicalAnalyzer::on_action_quit_triggered()
 void LexicalAnalyzer::on_action_clear_triggered()
 {
 	ui.textEdit_code->clear();
+	clearResult();
+	showState(ui.action_clear->text());
+}
+
+void LexicalAnalyzer::clearResult()
+{
 	QStandardItemModel *itemModel_token = qobject_cast<QStandardItemModel *>(ui.tableView_token->model());
 	itemModel_token->removeRows(0, itemModel_token->rowCount());
 	QStandardItemModel *itemModel_error = qobject_cast<QStandardItemModel *>(ui.tableView_error->model());
@@ -306,21 +309,26 @@ void LexicalAnalyzer::on_action_clear_triggered()
 void LexicalAnalyzer::on_action_analyse_triggered()
 {
 	qDebug() << "ANALYSE";
+	clearResult();
 	str_src = ui.textEdit_code->toPlainText();
 	analyzer = new Analyzer(str_src, ui);
 	analyzer->showResult();
+	analyzer->showError();
 	delete analyzer;
+	showState(QStringLiteral("分析结束"));
 }
 
 void LexicalAnalyzer::on_action_tokenlist_triggered()
 {
 	qDebug() << "SHOW TOKEN LIST";
+	showState(QStringLiteral("打开Token列表"));
 }
 
 void LexicalAnalyzer::on_action_about_triggered()
 {
 	qDebug() << "ABOUT";
 	AboutBox *aboutbox = new AboutBox(this);
+	showState(QStringLiteral("查看关于信息"));
 	aboutbox->show();
 }
 
@@ -329,4 +337,17 @@ void LexicalAnalyzer::on_action_homepage_triggered()
 	qDebug() << "HOMEPAGE";
 	const QUrl url("http://github.com/mokyue");
 	QDesktopServices::openUrl(url);
+	showState(QStringLiteral("访问开发者主页"));
+}
+
+void LexicalAnalyzer::showState(QString str_state)
+{
+	label_statusText->setText(str_state);
+	timer_status->start(5000);
+}
+
+void LexicalAnalyzer::on_timer_status_timeout()
+{
+	label_statusText->setText(QStringLiteral("就绪"));
+	timer_status->stop();
 }
